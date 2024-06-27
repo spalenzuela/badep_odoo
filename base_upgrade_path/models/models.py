@@ -16,10 +16,15 @@ class IrModuleModule(models.Model):
         for module in self:
             module.module_path = modules.get_module_resource(module.name, '')
 
+    def action_check_upgrade(self):
+        self._upgrade_available()
+
     @api.depends('target', 'alternative_name', 'state')
     def _upgrade_available(self):
         records = self if self.ids else self.search([('upgrade_available', '=', False)])
-        for rec in records:
+        for rec in records.filtered(lambda x: x.state != 'installed'):
+            rec.upgrade_available = False
+        for rec in records.filtered(lambda x: x.state == 'installed'):
             rec.upgrade_available = False
             if not rec.target:
                 rec.target = '17.0'
@@ -27,30 +32,28 @@ class IrModuleModule(models.Model):
                 rec.upgrade_available = True
             else:
                 try:
-                    r = requests.head("https://apps.odoo.com/apps/modules/%s/%s/" % (rec.target, rec.alternative_name if rec.alternative_name else rec.name))
+                    r = requests.head("https://apps.odoo.com/apps/modules/%s/%s" % (rec.target, rec.alternative_name if rec.alternative_name else rec.name))
                     if r.status_code == 200:
                         rec.upgrade_available = True
-                        return
-                    r = requests.head("https://pypi.org/project/odoo%s-addon-%s/" % ('' if rec.target == '15.0' else rec.target.replace('.0', ''),
-                                                                               (rec.alternative_name if rec.alternative_name else rec.name).replace('_', '-')))
-                    if r.status_code == 200:
-                        rec.upgrade_available = True
-                        return
-
-                    for repo in self.env['ir.module.repo'].search([]):
-                        path = 'https://api.github.com/repos/%s/contents/' % (repo.name)
-                        if repo.subpath:
-                            path = path + repo.subpath + '/'
-                        path = path + (rec.alternative_name if rec.alternative_name else rec.name) + ('?ref=%s' % rec.target)
-                        if repo.token:
-                            data = requests.get(path, auth=(repo.username, repo.token))
-                        else:
-                            data = requests.get(path)
-                        if data.status_code == 200:
+                    else:
+                        r = requests.head("https://pypi.org/project/odoo%s-addon-%s/" % ('' if int(rec.target[:2]) >= 15  else rec.target.replace('.0', ''),
+                                                                                   (rec.alternative_name if rec.alternative_name else rec.name).replace('_', '-')))
+                        if r.status_code == 200:
                             rec.upgrade_available = True
-                            return
+                        else:
+                            for repo in self.env['ir.module.repo'].search([]):
+                                path = 'https://api.github.com/repos/%s/contents/' % (repo.name)
+                                if repo.subpath:
+                                    path = path + repo.subpath + '/'
+                                path = path + (rec.alternative_name if rec.alternative_name else rec.name) + ('?ref=%s' % rec.target)
+                                if repo.token:
+                                    data = requests.get(path, auth=(repo.username, repo.token))
+                                else:
+                                    data = requests.get(path)
+                                if data.status_code == 200:
+                                    rec.upgrade_available = True
                 except requests.ConnectionError:
-                    return
+                    pass
 
     def action_force_compute_upgrade(self):
         self._upgrade_available()

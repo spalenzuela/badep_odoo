@@ -1,5 +1,5 @@
 from odoo import models, api, fields, modules
-import requests
+import requests, os
 
 class IrModuleModule(models.Model):
     _inherit = 'ir.module.module'
@@ -10,13 +10,34 @@ class IrModuleModule(models.Model):
         ('17.0', '17.0'),
     ], default='17.0', required=False)
     alternative_name = fields.Char(string='Alternative name')
-    module_path = fields.Char(compute='get_module_path')
+    python_lines = fields.Integer(compute='_get_module_info', store=True)
+    xml_lines = fields.Integer(compute='_get_module_info', store=True)
+    module_path = fields.Char(compute='_get_module_info', store=True)
 
-    def get_module_path(self):
+    def _get_module_info(self):
+        def count_lines_in_file(file_path):
+            with open(file_path, 'r', encoding='utf-8') as file:
+                try:
+                    return sum(1 for line in file)
+                except Exception:
+                    return 0
         for module in self:
             module.module_path = modules.get_module_resource(module.name, '')
+            xml_lines = python_lines = 0
+            if module.module_path:
+                for root, dirs, files in os.walk(module.module_path):
+                    for file in files:
+                        if file.endswith('.py'):
+                            file_path = os.path.join(root, file)
+                            python_lines += count_lines_in_file(file_path)
+                        elif file.endswith('.xml'):
+                            file_path = os.path.join(root, file)
+                            xml_lines += count_lines_in_file(file_path)
+            module.xml_lines = xml_lines
+            module.python_lines = python_lines
 
     def action_check_upgrade(self):
+        self._get_module_info()
         self._upgrade_available()
 
     @api.depends('target', 'alternative_name', 'state')

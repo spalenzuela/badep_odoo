@@ -17,6 +17,9 @@
                     <field name="target"/>
                     <field name="alternative_name"/>
                     <field name="upgrade_available"/>
+                    <field name="module_path" optional="hide"/>
+                    <field name="python_lines" optional="hide"/>
+                    <field name="xml_lines" optional="hide"/>
                 </field>
             </field>
         </record>

@@ -57,10 +57,12 @@ class IrModuleModule(models.Model):
                     if r.status_code == 200:
                         rec.upgrade_available = True
                     else:
-                        r = requests.head("https://pypi.org/project/odoo%s-addon-%s/" % ('' if int(rec.target[:2]) >= 15  else rec.target.replace('.0', ''),
+                        r = requests.get(f'https://pypi.org/pypi/odoo%s-addon-%s/json' % ('' if int(rec.target[:2]) >= 15  else rec.target.replace('.0', ''),
                                                                                    (rec.alternative_name if rec.alternative_name else rec.name).replace('_', '-')))
                         if r.status_code == 200:
-                            rec.upgrade_available = True
+                            releases = r.json()['releases'].keys()
+                            if any([x[:4] == rec.target for x in releases]):
+                                rec.upgrade_available = True
                         else:
                             for repo in self.env['ir.module.repo'].search([]):
                                 path = 'https://api.github.com/repos/%s/contents/' % (repo.name)
